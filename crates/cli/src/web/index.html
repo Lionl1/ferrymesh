@@ -1,0 +1,456 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="referrer" content="no-referrer">
+<title>ferry</title>
+<style>
+:root {
+  --bg: #f4f5f7; --panel: #ffffff; --line: #e3e5ea; --text: #1b1d22; --muted: #6b7180;
+  --accent: #1f7a6d; --accent-text: #ffffff; --bubble-in: #ffffff; --bubble-out: #d8efe9;
+  --danger: #b3261e; --shadow: 0 1px 2px rgba(0,0,0,.06), 0 8px 24px rgba(0,0,0,.06);
+}
+@media (prefers-color-scheme: dark) {
+  :root {
+    --bg: #111316; --panel: #1a1d21; --line: #2a2e34; --text: #e7e9ec; --muted: #8d94a0;
+    --accent: #3fb8a5; --accent-text: #0b1513; --bubble-in: #22262b; --bubble-out: #1d3a35;
+    --danger: #f2867e; --shadow: 0 1px 2px rgba(0,0,0,.4), 0 8px 24px rgba(0,0,0,.3);
+  }
+}
+* { box-sizing: border-box; }
+html, body { height: 100%; margin: 0; }
+body {
+  background: var(--bg); color: var(--text);
+  font: 15px/1.4 system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
+  display: flex; flex-direction: column;
+}
+button { font: inherit; cursor: pointer; }
+input, textarea { font: inherit; color: inherit; }
+
+header {
+  display: flex; align-items: center; gap: 12px; padding: 10px 16px;
+  padding-top: max(10px, env(safe-area-inset-top));
+  background: var(--panel); border-bottom: 1px solid var(--line);
+}
+.logo { font-weight: 700; letter-spacing: .2px; }
+.logo span { color: var(--accent); }
+.pills { display: flex; gap: 6px; flex-wrap: wrap; margin-left: auto; }
+.pill {
+  font-size: 12px; color: var(--muted); border: 1px solid var(--line);
+  border-radius: 999px; padding: 2px 9px; white-space: nowrap;
+}
+.pill b { color: var(--text); font-weight: 600; }
+.pill.live::before {
+  content: ""; display: inline-block; width: 7px; height: 7px; border-radius: 50%;
+  background: var(--muted); margin-right: 6px; vertical-align: 1px;
+}
+.pill.live.on::before { background: #2fb36b; }
+.btn {
+  border: 1px solid var(--line); background: var(--panel); color: var(--text);
+  border-radius: 8px; padding: 6px 12px;
+}
+.btn.primary { background: var(--accent); color: var(--accent-text); border-color: transparent; }
+.btn:disabled { opacity: .5; cursor: default; }
+
+main { flex: 1; display: flex; min-height: 0; }
+aside {
+  width: 300px; flex-shrink: 0; background: var(--panel); border-right: 1px solid var(--line);
+  display: flex; flex-direction: column; min-height: 0;
+}
+.aside-head { display: flex; align-items: center; justify-content: space-between; padding: 12px 16px; }
+.aside-head h2 { font-size: 13px; text-transform: uppercase; letter-spacing: .6px; color: var(--muted); margin: 0; }
+#contacts { list-style: none; margin: 0; padding: 0 8px 8px; overflow-y: auto; flex: 1; }
+#contacts li {
+  display: flex; gap: 10px; align-items: center; padding: 9px 10px; border-radius: 10px; cursor: pointer;
+}
+#contacts li:hover { background: var(--bg); }
+#contacts li.active { background: var(--bubble-out); }
+.avatar {
+  width: 36px; height: 36px; border-radius: 50%; flex-shrink: 0;
+  display: grid; place-items: center; font-weight: 600; color: #fff; font-size: 14px;
+}
+.who { min-width: 0; flex: 1; }
+.who .name { font-weight: 600; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.who .name.stranger { font-weight: 500; color: var(--muted); font-style: italic; }
+.who .preview { color: var(--muted); font-size: 13px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.unread { width: 9px; height: 9px; border-radius: 50%; background: var(--accent); flex-shrink: 0; }
+.empty { color: var(--muted); padding: 16px; font-size: 14px; }
+
+section#chat { flex: 1; display: flex; flex-direction: column; min-width: 0; }
+.chat-head {
+  display: flex; align-items: center; gap: 10px; padding: 10px 16px;
+  background: var(--panel); border-bottom: 1px solid var(--line);
+}
+.chat-head .who .preview { font-family: ui-monospace, Menlo, monospace; font-size: 12px; }
+#back { display: none; border: none; background: none; color: var(--accent); font-size: 22px; padding: 0 6px 0 0; }
+#log { flex: 1; overflow-y: auto; padding: 16px; display: flex; flex-direction: column; gap: 6px; }
+.day { align-self: center; color: var(--muted); font-size: 12px; margin: 10px 0 4px; }
+.msg {
+  max-width: min(560px, 80%); padding: 7px 11px 5px; border-radius: 14px;
+  background: var(--bubble-in); box-shadow: var(--shadow); white-space: pre-wrap; overflow-wrap: anywhere;
+}
+.msg.out { align-self: flex-end; background: var(--bubble-out); border-bottom-right-radius: 4px; }
+.msg.in { align-self: flex-start; border-bottom-left-radius: 4px; }
+.meta { font-size: 11px; color: var(--muted); text-align: right; margin-top: 2px; white-space: nowrap; }
+.meta .ok { color: var(--accent); font-weight: 600; }
+#composer {
+  display: flex; gap: 8px; padding: 10px 12px; padding-bottom: max(10px, env(safe-area-inset-bottom));
+  background: var(--panel); border-top: 1px solid var(--line);
+}
+#text {
+  flex: 1; resize: none; border: 1px solid var(--line); border-radius: 12px; padding: 9px 12px;
+  background: var(--bg); max-height: 140px; outline: none;
+}
+#text:focus { border-color: var(--accent); }
+.placeholder { flex: 1; display: grid; place-items: center; color: var(--muted); text-align: center; padding: 24px; }
+
+dialog {
+  border: 1px solid var(--line); border-radius: 14px; background: var(--panel); color: var(--text);
+  width: min(460px, calc(100vw - 32px)); padding: 20px; box-shadow: var(--shadow);
+}
+dialog::backdrop { background: rgba(0,0,0,.4); }
+dialog h3 { margin: 0 0 12px; }
+dialog label { display: block; font-size: 13px; color: var(--muted); margin: 10px 0 4px; }
+dialog input, dialog textarea {
+  width: 100%; border: 1px solid var(--line); border-radius: 8px; padding: 8px 10px; background: var(--bg);
+}
+dialog textarea { font-family: ui-monospace, Menlo, monospace; font-size: 12px; height: 84px; resize: vertical; }
+.card-box {
+  font-family: ui-monospace, Menlo, monospace; font-size: 12px; word-break: break-all;
+  background: var(--bg); border: 1px solid var(--line); border-radius: 8px; padding: 10px; user-select: all;
+}
+.hint { color: var(--muted); font-size: 13px; margin: 8px 0 0; }
+.error { color: var(--danger); font-size: 13px; min-height: 18px; margin-top: 8px; }
+.actions { display: flex; justify-content: flex-end; gap: 8px; margin-top: 14px; }
+
+#locked {
+  position: fixed; inset: 0; background: var(--bg); display: none; place-items: center; padding: 24px; text-align: center;
+}
+#locked code { background: var(--panel); border: 1px solid var(--line); padding: 2px 6px; border-radius: 6px; }
+
+@media (max-width: 720px) {
+  aside { width: 100%; border-right: none; }
+  main.chatting aside { display: none; }
+  main:not(.chatting) section#chat { display: none; }
+  #back { display: block; }
+  .pill.hide-sm { display: none; }
+  .msg { max-width: 88%; }
+}
+</style>
+</head>
+<body>
+<header>
+  <div class="logo">ferry<span>mesh</span></div>
+  <div class="pills">
+    <span class="pill live" id="live" title="Connection to your node">node</span>
+    <span class="pill" title="Neighbours in radio or network range"><b id="neighbors">–</b> neighbours</span>
+    <span class="pill hide-sm" title="Messages this node carries, for others and for you"><b id="stored">–</b> carried</span>
+    <span class="pill hide-sm" title="Your messages without a delivery receipt"><b id="pending">–</b> in transit</span>
+  </div>
+  <button class="btn" id="show-card">My card</button>
+</header>
+
+<main id="main">
+  <aside>
+    <div class="aside-head">
+      <h2>Chats</h2>
+      <button class="btn primary" id="add-contact">+ Contact</button>
+    </div>
+    <ul id="contacts"></ul>
+  </aside>
+  <section id="chat">
+    <div class="placeholder" id="nochat"><p>Pick a chat, or add a contact with their <code>fm1…</code> card.<br>
+      Messages are end-to-end encrypted and hop through nearby devices until they arrive.</p></div>
+  </section>
+</main>
+
+<template id="chat-tpl">
+  <div class="chat-head">
+    <button id="back" aria-label="Back">‹</button>
+    <div class="avatar"></div>
+    <div class="who"><div class="name"></div><div class="preview"></div></div>
+    <button class="btn" id="save-stranger" hidden>Save contact</button>
+  </div>
+  <div id="log"></div>
+  <form id="composer">
+    <textarea id="text" rows="1" placeholder="Message" title="Enter sends, Shift+Enter starts a new line"></textarea>
+    <button class="btn primary" id="send">Send</button>
+  </form>
+</template>
+
+<dialog id="card-dialog">
+  <h3>Your contact card</h3>
+  <div class="card-box" id="my-card"></div>
+  <p class="hint">Give it to people who should be able to write to you. Address: <span id="my-address"></span></p>
+  <div class="actions">
+    <button class="btn" id="copy-card">Copy</button>
+    <button class="btn primary" data-close>Done</button>
+  </div>
+</dialog>
+
+<dialog id="contact-dialog">
+  <form id="contact-form">
+    <h3>Add a contact</h3>
+    <label for="c-name">Name</label>
+    <input id="c-name" autocomplete="off" maxlength="32" placeholder="alice" required>
+    <label for="c-card">Contact card</label>
+    <textarea id="c-card" placeholder="fm1…" required></textarea>
+    <div class="error" id="c-error"></div>
+    <div class="actions">
+      <button class="btn" type="button" data-close>Cancel</button>
+      <button class="btn primary" type="submit">Add</button>
+    </div>
+  </form>
+</dialog>
+
+<div id="locked">
+  <div>
+    <h2>Open the link from your terminal</h2>
+    <p>This page needs the access link that <code>ferry web</code> printed when it started,
+      the one ending in <code>#…</code>. If the node restarted, the link changed.</p>
+  </div>
+</div>
+
+<script>
+"use strict";
+const token = location.hash.slice(1);
+const $ = (id) => document.getElementById(id);
+const state = { me: null, contacts: [], messages: [], current: null, unread: new Set() };
+
+async function api(path, options = {}) {
+  const resp = await fetch(path, {
+    ...options,
+    headers: { "authorization": "Bearer " + token, "content-type": "application/json", ...(options.headers || {}) },
+  });
+  if (resp.status === 401) { lock(); throw new Error("unauthorized"); }
+  const body = await resp.json().catch(() => ({}));
+  if (!resp.ok) throw new Error(body.error || resp.statusText);
+  return body;
+}
+
+function lock() { $("locked").style.display = "grid"; }
+
+const palette = ["#2f7d6d", "#7a5af5", "#d9534f", "#e08a1e", "#2b78c5", "#b3478f", "#5c8a2e", "#8a6d3b"];
+function colorFor(card) {
+  let h = 0;
+  for (const c of card) h = (h * 31 + c.charCodeAt(0)) >>> 0;
+  return palette[h % palette.length];
+}
+function label(contact) { return contact.name || "unknown " + contact.address.slice(0, 8); }
+function initials(contact) { return contact.name ? contact.name.slice(0, 2).toUpperCase() : "?"; }
+function contactFor(card) { return state.contacts.find((c) => c.card === card); }
+
+function fmtTime(ms) { return new Date(ms).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" }); }
+function fmtDay(ms) { return new Date(ms).toLocaleDateString([], { weekday: "short", day: "numeric", month: "short" }); }
+function fmtDelay(ms) {
+  const s = Math.round(ms / 1000);
+  if (s < 60) return s + " s";
+  if (s < 3600) return Math.round(s / 60) + " min";
+  return Math.round(s / 3600) + " h";
+}
+
+function renderContacts() {
+  const list = $("contacts");
+  list.replaceChildren();
+  const last = new Map();
+  for (const m of state.messages) last.set(m.peer, m);
+  const sorted = [...state.contacts].sort((a, b) => (last.get(b.card)?.at_ms || 0) - (last.get(a.card)?.at_ms || 0));
+  if (sorted.length === 0) {
+    const li = document.createElement("div");
+    li.className = "empty";
+    li.textContent = "No contacts yet. Share your card and add theirs.";
+    list.append(li);
+  }
+  for (const c of sorted) {
+    const li = document.createElement("li");
+    if (state.current === c.card) li.classList.add("active");
+    const av = document.createElement("div");
+    av.className = "avatar"; av.style.background = colorFor(c.card); av.textContent = initials(c);
+    const who = document.createElement("div");
+    who.className = "who";
+    const name = document.createElement("div");
+    name.className = "name" + (c.name ? "" : " stranger"); name.textContent = label(c);
+    const preview = document.createElement("div");
+    preview.className = "preview";
+    const m = last.get(c.card);
+    preview.textContent = m ? (m.outgoing ? "You: " : "") + m.text : c.address;
+    who.append(name, preview);
+    li.append(av, who);
+    if (state.unread.has(c.card)) { const dot = document.createElement("div"); dot.className = "unread"; li.append(dot); }
+    li.onclick = () => openChat(c.card);
+    list.append(li);
+  }
+}
+
+function openChat(card) {
+  state.current = card;
+  state.unread.delete(card);
+  const contact = contactFor(card);
+  const chat = $("chat");
+  chat.replaceChildren($("chat-tpl").content.cloneNode(true));
+  chat.querySelector(".avatar").style.background = colorFor(card);
+  chat.querySelector(".avatar").textContent = initials(contact);
+  chat.querySelector(".who .name").textContent = label(contact);
+  chat.querySelector(".who .preview").textContent = contact.address;
+  const save = $("save-stranger");
+  if (!contact.name) {
+    save.hidden = false;
+    save.onclick = () => openContactDialog(card);
+  }
+  $("back").onclick = () => { state.current = null; $("main").classList.remove("chatting"); renderContacts(); };
+  $("main").classList.add("chatting");
+  const text = $("text");
+  text.addEventListener("keydown", (e) => {
+    if (e.key === "Enter" && !e.shiftKey && !e.isComposing) { e.preventDefault(); $("composer").requestSubmit(); }
+  });
+  text.addEventListener("input", () => { text.style.height = "auto"; text.style.height = text.scrollHeight + "px"; });
+  $("composer").onsubmit = sendMessage;
+  renderLog();
+  renderContacts();
+  if (matchMedia("(min-width: 721px)").matches) text.focus();
+}
+
+function renderLog() {
+  const log = $("log");
+  if (!log) return;
+  log.replaceChildren();
+  let lastDay = "";
+  const items = state.messages.filter((m) => m.peer === state.current);
+  if (items.length === 0) {
+    const e = document.createElement("div");
+    e.className = "empty"; e.style.alignSelf = "center";
+    e.textContent = "No messages yet. They are end-to-end encrypted and may travel through other people's devices.";
+    log.append(e);
+  }
+  for (const m of items) {
+    const day = fmtDay(m.at_ms);
+    if (day !== lastDay) {
+      const d = document.createElement("div"); d.className = "day"; d.textContent = day; log.append(d); lastDay = day;
+    }
+    const div = document.createElement("div");
+    div.className = "msg " + (m.outgoing ? "out" : "in");
+    div.textContent = m.text;
+    const meta = document.createElement("div");
+    meta.className = "meta";
+    let info = fmtTime(m.at_ms);
+    if (!m.outgoing) {
+      const delay = m.at_ms - m.sent_at_ms;
+      if (delay > 5000) info = "travelled " + fmtDelay(delay) + " · " + info;
+    }
+    meta.append(info);
+    if (m.outgoing) {
+      const s = document.createElement("span");
+      s.className = m.delivered ? "ok" : "";
+      s.textContent = m.delivered ? " ✓ delivered" : " · in transit";
+      s.title = m.delivered ? "The recipient's receipt came back" : "Carried through the mesh until it reaches the recipient";
+      meta.append(s);
+    }
+    div.append(meta);
+    log.append(div);
+  }
+  log.scrollTop = log.scrollHeight;
+}
+
+async function sendMessage(e) {
+  e.preventDefault();
+  const text = $("text");
+  const value = text.value.trim();
+  if (!value) return;
+  $("send").disabled = true;
+  try {
+    const entry = await api("/api/messages", { method: "POST", body: JSON.stringify({ to: state.current, text: value }) });
+    addMessage(entry);
+    text.value = ""; text.style.height = "auto";
+  } catch (err) {
+    if (err.message !== "unauthorized") alert("Not sent: " + err.message);
+  } finally {
+    $("send").disabled = false;
+    text.focus();
+  }
+}
+
+function addMessage(entry) {
+  if (state.messages.some((m) => m.id === entry.id)) return;
+  state.messages.push(entry);
+  if (!contactFor(entry.peer)) loadContacts();
+  if (!entry.outgoing && entry.peer !== state.current) state.unread.add(entry.peer);
+  renderContacts();
+  if (entry.peer === state.current) renderLog();
+}
+
+async function loadContacts() {
+  state.contacts = await api("/api/contacts");
+  renderContacts();
+}
+
+async function loadAll() {
+  [state.me, state.contacts, state.messages] = await Promise.all([api("/api/me"), api("/api/contacts"), api("/api/messages")]);
+  $("my-card").textContent = state.me.card;
+  $("my-address").textContent = state.me.address;
+  renderContacts();
+  if (state.current && contactFor(state.current)) renderLog();
+}
+
+async function pollStatus() {
+  try {
+    const s = await api("/api/status");
+    $("neighbors").textContent = s.neighbors;
+    $("stored").textContent = s.stored;
+    $("pending").textContent = s.pending;
+    $("live").classList.add("on");
+  } catch {
+    $("live").classList.remove("on");
+  }
+}
+
+function listen() {
+  const events = new EventSource("/api/events?token=" + encodeURIComponent(token));
+  events.onopen = () => { $("live").classList.add("on"); loadAll().catch(() => {}); };
+  events.onerror = () => { $("live").classList.remove("on"); pollStatus(); };
+  events.onmessage = (e) => {
+    const update = JSON.parse(e.data);
+    if (update.type === "message") addMessage(update.entry);
+    else if (update.type === "delivered") {
+      const m = state.messages.find((m) => m.id === update.id);
+      if (m) { m.delivered = true; if (m.peer === state.current) renderLog(); }
+      pollStatus();
+    } else if (update.type === "resync") loadAll();
+  };
+}
+
+function openContactDialog(card) {
+  $("c-name").value = "";
+  $("c-card").value = card || "";
+  $("c-error").textContent = "";
+  $("contact-dialog").showModal();
+  $("c-name").focus();
+}
+
+$("contact-form").onsubmit = async (e) => {
+  e.preventDefault();
+  try {
+    const c = await api("/api/contacts", { method: "POST", body: JSON.stringify({ name: $("c-name").value.trim(), card: $("c-card").value.trim() }) });
+    $("contact-dialog").close();
+    await loadContacts();
+    openChat(c.card);
+  } catch (err) {
+    $("c-error").textContent = err.message;
+  }
+};
+$("add-contact").onclick = () => openContactDialog("");
+$("show-card").onclick = () => $("card-dialog").showModal();
+$("copy-card").onclick = async () => {
+  try { await navigator.clipboard.writeText(state.me.card); $("copy-card").textContent = "Copied"; }
+  catch { getSelection().selectAllChildren($("my-card")); }
+  setTimeout(() => ($("copy-card").textContent = "Copy"), 1500);
+};
+for (const b of document.querySelectorAll("[data-close]")) b.onclick = () => b.closest("dialog").close();
+
+if (!token) lock();
+else {
+  loadAll().then(() => { listen(); pollStatus(); setInterval(pollStatus, 3000); }).catch(() => {});
+}
+</script>
+</body>
+</html>
