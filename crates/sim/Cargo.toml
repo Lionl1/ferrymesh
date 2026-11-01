@@ -1,0 +1,15 @@
+[package]
+name = "ferrymesh-sim"
+description = "Deterministic many-node simulator for the ferrymesh protocol"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+repository.workspace = true
+
+[[bin]]
+name = "ferry-sim"
+path = "src/main.rs"
+
+[dependencies]
+clap.workspace = true
+ferrymesh-core.workspace = true
