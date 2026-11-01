@@ -1,0 +1,13 @@
+[package]
+name = "ferrymesh-net"
+description = "Transports (UDP on the LAN, planned BLE/LoRa/relay) and the tokio runtime for a ferrymesh node"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+repository.workspace = true
+
+[dependencies]
+ferrymesh-core.workspace = true
+thiserror.workspace = true
+tokio.workspace = true
+tracing.workspace = true
