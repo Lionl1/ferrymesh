@@ -15,7 +15,7 @@ relay and Wi-Fi Direct next ([transports](docs/transports.md)).
 - **One Rust core, no I/O.** The protocol is a state machine (`ferrymesh-core`); the same
   code runs in the simulator, in the tokio runtime, and later in mobile apps.
 
-Status: MVP. Core protocol, many-node simulator, UDP transport, CLI client. Not audited:
+Status: MVP. Core protocol, many-node simulator, UDP transport, CLI and web clients. Not audited:
 do not trust it with lives yet.
 
 ## Quick start
@@ -28,6 +28,12 @@ cargo build --release
 ./target/release/ferry run                       # join the LAN mesh (UDP 47474)
 @bob hi there                                    # typed into `run`
 ```
+
+Prefer a browser? `ferry web` runs the same node with a chat page instead of the
+terminal and prints a link like `http://127.0.0.1:8047/#<token>`. The page works on a phone
+too; it listens on localhost only, and the API needs the token from the link (`--token`
+or `FERRY_WEB_TOKEN` fixes it for a bookmark). Run either `ferry run` or `ferry web` for a
+home directory, not both.
 
 Every running `ferry` also relays for others. `ferry send bob text` queues a message
 while offline; the next `ferry run` carries it. Without LAN broadcast (other subnets,
@@ -42,7 +48,7 @@ Three nodes on one machine, where Alice and Carol can only reach each other thro
 ## How it works
 
 ```
- app (ferry CLI, later TUI / Android / iOS)
+ app (ferry CLI and web UI, later Android / iOS)
    │  send / events
  ferrymesh-net::Host ── tokio: timers, persistence, multiplexes transports
    │  peer up/down, frames
@@ -102,7 +108,7 @@ and 60 moving nodes.
 | `crates/core` | identities, envelopes, wire format, fragmentation, routing state machine |
 | `crates/sim` | the simulator and `ferry-sim` |
 | `crates/net` | `Transport` trait, UDP transport, planned transports, tokio `Host` |
-| `crates/cli` | `ferry` |
+| `crates/cli` | `ferry`: terminal chat, web UI (`ferry web`), chat history |
 
 ## Development
 
