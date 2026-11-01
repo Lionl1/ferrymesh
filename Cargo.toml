@@ -1,0 +1,29 @@
+[workspace]
+resolver = "3"
+members = ["crates/core", "crates/sim"]
+
+[workspace.package]
+version = "0.1.0"
+edition = "2024"
+license = "MIT"
+repository = "https://github.com/Lionl1/ferrymesh"
+
+[workspace.dependencies]
+ferrymesh-core = { path = "crates/core" }
+ferrymesh-net = { path = "crates/net" }
+ferrymesh-sim = { path = "crates/sim" }
+anyhow = "1"
+blake3 = "1"
+chacha20poly1305 = "0.10"
+clap = { version = "4", features = ["derive"] }
+ed25519-dalek = "2"
+getrandom = "0.3"
+hex = "0.4"
+postcard = { version = "1", features = ["alloc"] }
+serde = { version = "1", features = ["derive"] }
+serde_json = "1"
+thiserror = "2"
+tokio = { version = "1", features = ["full"] }
+tracing = "0.1"
+tracing-subscriber = { version = "0.3", features = ["env-filter"] }
+x25519-dalek = { version = "2", features = ["static_secrets"] }
