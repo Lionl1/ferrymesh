@@ -9,6 +9,6 @@ pub mod planned;
 pub mod transport;
 pub mod udp;
 
-pub use host::{Host, HostHandle};
+pub use host::{Host, HostHandle, HostSender, Status};
 pub use transport::{Outgoing, Transport, TransportError, TransportEvent};
 pub use udp::{UdpConfig, UdpTransport};

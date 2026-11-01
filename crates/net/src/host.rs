@@ -47,7 +47,7 @@ impl Host {
         let public = self.node.public();
         let task = tokio::spawn(run(self, command_rx, event_tx));
         HostHandle {
-            commands,
+            sender: HostSender { commands },
             events,
             task,
             address,
@@ -62,11 +62,50 @@ enum Command {
         body: Vec<u8>,
         reply: oneshot::Sender<ferrymesh_core::Result<MsgId>>,
     },
+    Status {
+        reply: oneshot::Sender<Status>,
+    },
     Shutdown,
 }
 
-pub struct HostHandle {
+/// A node's counters, for status lines and the web UI.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub struct Status {
+    pub neighbors: usize,
+    /// Messages carried for others (and our own until delivered).
+    pub stored: usize,
+    /// Our messages without a delivery receipt.
+    pub pending: usize,
+}
+
+/// A cloneable way to talk to a running host, for apps with several tasks.
+#[derive(Clone)]
+pub struct HostSender {
     commands: mpsc::Sender<Command>,
+}
+
+impl HostSender {
+    pub async fn send(&self, to: PublicIdentity, body: Vec<u8>) -> ferrymesh_core::Result<MsgId> {
+        let (reply, answer) = oneshot::channel();
+        self.commands
+            .send(Command::Send { to, body, reply })
+            .await
+            .expect("the host is running");
+        answer.await.expect("the host answers every command")
+    }
+
+    pub async fn status(&self) -> Status {
+        let (reply, answer) = oneshot::channel();
+        self.commands
+            .send(Command::Status { reply })
+            .await
+            .expect("the host is running");
+        answer.await.expect("the host answers every command")
+    }
+}
+
+pub struct HostHandle {
+    sender: HostSender,
     events: mpsc::UnboundedReceiver<Event>,
     task: JoinHandle<Node>,
     pub address: Address,
@@ -75,12 +114,15 @@ pub struct HostHandle {
 
 impl HostHandle {
     pub async fn send(&self, to: PublicIdentity, body: Vec<u8>) -> ferrymesh_core::Result<MsgId> {
-        let (reply, answer) = oneshot::channel();
-        self.commands
-            .send(Command::Send { to, body, reply })
-            .await
-            .expect("the host is running");
-        answer.await.expect("the host answers every command")
+        self.sender.send(to, body).await
+    }
+
+    pub async fn status(&self) -> Status {
+        self.sender.status().await
+    }
+
+    pub fn sender(&self) -> HostSender {
+        self.sender.clone()
     }
 
     /// The next message for us or delivery receipt; `None` once the host stopped.
@@ -95,7 +137,7 @@ impl HostHandle {
 
     /// Stops the host, saves its state and returns the node.
     pub async fn shutdown(self) -> Node {
-        let _ = self.commands.send(Command::Shutdown).await;
+        let _ = self.sender.commands.send(Command::Shutdown).await;
         self.task.await.expect("the host task does not panic")
     }
 }
@@ -171,6 +213,13 @@ async fn run(
             command = commands.recv() => match command {
                 Some(Command::Send { to, body, reply }) => {
                     let _ = reply.send(node.send(&to, &body, now_ms(), &mut OsEntropy));
+                }
+                Some(Command::Status { reply }) => {
+                    let _ = reply.send(Status {
+                        neighbors: node.neighbor_count(),
+                        stored: node.stored(),
+                        pending: node.pending(),
+                    });
                 }
                 Some(Command::Shutdown) | None => break,
             },
