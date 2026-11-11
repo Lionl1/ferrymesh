@@ -39,6 +39,14 @@ pub struct Config {
     /// Ids and receipts per `Hello` (keeps it small on slow links).
     pub max_hello_ids: usize,
     pub max_body: usize,
+    /// The longest lifetime accepted from others. `ttl_ms` is written by a sender no relay
+    /// can identify, so a longer one is dropped; keep your own `ttl_ms` within it.
+    pub max_ttl_ms: u64,
+    /// How far ahead of this node's clock `created_ms` may be.
+    pub max_clock_skew_ms: u64,
+    /// Ids remembered for deduplication. When full, nothing new is carried for others
+    /// until old ids expire; messages for this node are still delivered.
+    pub max_seen: usize,
 }
 
 impl Default for Config {
@@ -51,6 +59,9 @@ impl Default for Config {
             hello_interval_ms: 5000,
             max_hello_ids: 128,
             max_body: 16 * 1024,
+            max_ttl_ms: 7 * 24 * 3600 * 1000,
+            max_clock_skew_ms: 3600 * 1000,
+            max_seen: 100_000,
         }
     }
 }
@@ -308,15 +319,28 @@ impl Node {
         if let Some(n) = self.neighbors.get_mut(&link) {
             n.known.insert(id);
         }
+        // The lifetime and the timestamp come from a sender no relay can identify. Without
+        // these limits one peer could fill the store with messages that never expire (they
+        // also win every eviction, which keeps the latest expiry) and grow `seen` for ever.
+        if env.ttl_ms > self.config.max_ttl_ms
+            || env.created_ms > now_ms.saturating_add(self.config.max_clock_skew_ms)
+        {
+            return;
+        }
         if env.is_expired(now_ms)
             || self.state.seen.contains_key(&id)
             || self.state.acks.contains_key(&id)
         {
             return;
         }
-        self.state.seen.insert(id, env.expires_at());
+        let for_us = env.dest == self.address;
+        if self.state.seen.len() < self.config.max_seen {
+            self.state.seen.insert(id, env.expires_at());
+        } else if !for_us {
+            return;
+        }
 
-        if env.dest == self.address {
+        if for_us {
             // Undecryptable or forged messages are dropped silently: telling the
             // neighbour would only help an attacker probe.
             if let Ok(opened) = envelope::open(&self.identity, &env) {
@@ -484,6 +508,82 @@ mod tests {
             nodes[b].peer_up(a as LinkId, 1200, 0);
         }
         (nodes, links, rng)
+    }
+
+    #[test]
+    fn lifetimes_beyond_the_limits_are_not_carried() {
+        let mut rng = SeededEntropy::new(5);
+        let config = Config::default();
+        let mut relay = Node::new(Identity::generate(&mut rng), config.clone());
+        let sender = Identity::generate(&mut rng);
+        let to = Identity::generate(&mut rng).public();
+        let now = 1_000_000;
+        let seal = |ttl_ms: u64, created_ms: u64, rng: &mut SeededEntropy| {
+            let params = SendParams {
+                ttl_ms,
+                hop_limit: 16,
+                copies: 1,
+            };
+            envelope::seal(&sender, &to, b"x", created_ms, params, rng).envelope
+        };
+        let forever = seal(u64::MAX, now, &mut rng);
+        let from_the_future = seal(config.ttl_ms, now + config.max_clock_skew_ms + 1, &mut rng);
+        for env in [forever, from_the_future] {
+            let id = env.id();
+            relay.on_bundle(1, env, now);
+            assert!(!relay.carries(&id));
+        }
+        assert!(
+            relay.state.seen.is_empty(),
+            "a refused message leaves nothing behind"
+        );
+
+        let at_the_limits = seal(config.max_ttl_ms, now + config.max_clock_skew_ms, &mut rng);
+        let id = at_the_limits.id();
+        relay.on_bundle(1, at_the_limits, now);
+        assert!(relay.carries(&id));
+    }
+
+    #[test]
+    fn the_dedup_set_is_bounded() {
+        let mut rng = SeededEntropy::new(6);
+        let config = Config {
+            max_seen: 3,
+            ..Config::default()
+        };
+        let mut relay = Node::new(Identity::generate(&mut rng), config);
+        let sender = Identity::generate(&mut rng);
+        let to = Identity::generate(&mut rng).public();
+        let params = SendParams {
+            ttl_ms: 1000,
+            hop_limit: 16,
+            copies: 1,
+        };
+        for created_ms in 0..10 {
+            let env = envelope::seal(&sender, &to, b"x", created_ms, params, &mut rng).envelope;
+            relay.on_bundle(1, env, 10);
+        }
+        assert_eq!(relay.state.seen.len(), 3);
+        assert_eq!(relay.state.store.len(), 3);
+
+        // A message for this node is delivered even then, and only once.
+        let me = relay.public();
+        let mine = envelope::seal(&sender, &me, b"hi", 5, params, &mut rng).envelope;
+        relay.on_bundle(1, mine.clone(), 10);
+        relay.on_bundle(1, mine, 10);
+        let delivered = relay
+            .drain_actions()
+            .into_iter()
+            .filter(|a| matches!(a, Action::Event(Event::Message { .. })))
+            .count();
+        assert_eq!(delivered, 1);
+
+        // Old ids expire and the relay carries again.
+        relay.tick(5000);
+        let env = envelope::seal(&sender, &to, b"x", 5000, params, &mut rng).envelope;
+        let id = env.id();
+        relay.on_bundle(1, env, 5000);
+        assert!(relay.carries(&id));
     }
 
     #[test]

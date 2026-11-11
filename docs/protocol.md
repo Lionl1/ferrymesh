@@ -67,7 +67,12 @@ expired, or `hops ≥ hop_limit` (a neighbour that is the destination always get
   away half; a holder of one copy waits to meet the recipient.
 
 Storage is bounded (`max_stored`); when full, the message closest to expiry is dropped,
-unless the new one expires even sooner.
+unless the new one expires even sooner. A relay does not take a sender's word for the
+lifetime: a message with `ttl_ms` above `max_ttl_ms` (7 days) or stamped more than
+`max_clock_skew_ms` (1 hour) ahead of the relay's clock is dropped, so nothing can be made
+to stay for ever or to win every eviction. The deduplication set is bounded too
+(`max_seen`): when it is full a node carries nothing new for others until old ids expire,
+and still delivers what is addressed to it.
 
 ## Receipts
 
@@ -85,7 +90,8 @@ frames per node and drops them after 30 s.
 
 - `Hello` lists are sent in full every interval; this dominates traffic in big meshes
   (see the simulator's byte counts). Plan: Bloom filters / deltas.
-- Clocks are trusted for TTL; badly skewed clocks shorten or extend lifetimes.
+- Clocks are trusted for TTL within `max_clock_skew_ms`; skewed clocks shorten or extend
+  lifetimes, and a node whose clock runs more than that ahead is not relayed.
 - No rate limiting or proof of work: a hostile neighbour can fill stores up to `max_stored`.
 - `Hello` addresses are not authenticated: a neighbour can claim to be any destination
   and receive direct handovers (it still cannot read them).
